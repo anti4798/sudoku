@@ -3,7 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>정통 스도쿠 (Classic Sudoku)</title>
+    <title>스도쿠</title>
+    <meta name="description" content="브라우저에서 바로 즐기는 클래식 스도쿠 퍼즐">
+
+    <!-- Open Graph / 링크 미리보기 -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://sudoku.elfsaycongrew.win/">
+    <meta property="og:title" content="스도쿠">
+    <meta property="og:description" content="브라우저에서 바로 즐기는 클래식 스도쿠 퍼즐">
+    <meta property="og:image" content="https://sudoku.elfsaycongrew.win/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="ko_KR">
+    <meta name="twitter:card" content="summary_large_image">
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -23,6 +35,22 @@
             border: 3px solid #1e293b;
             background-color: #ffffff;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 시작 전: 보드를 흐리게 가려서 미리 풀지 못하게 함 */
+        #sudoku-board {
+            transition: filter 0.4s ease;
+        }
+        #board-wrap.not-started #sudoku-board {
+            filter: blur(10px);
+            pointer-events: none;
+        }
+        #start-overlay {
+            transition: opacity 0.4s ease;
+        }
+        #board-wrap:not(.not-started) #start-overlay {
+            opacity: 0;
+            pointer-events: none;
         }
 
         /* 개별 셀 기본 스타일 */
@@ -113,7 +141,7 @@
 
     <!-- 헤더 -->
     <header class="text-center mb-4">
-        <h1 class="text-3xl font-bold tracking-tight text-slate-800">Classic Sudoku</h1>
+        <h1 class="text-3xl font-bold tracking-tight text-slate-800">스도쿠</h1>
         <div id="timer" class="mt-1 text-lg font-semibold text-slate-500 tabular-nums">00:00</div>
     </header>
 
@@ -126,9 +154,16 @@
             <button data-level="hard" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">어려움</button>
         </div>
 
-        <!-- 스도쿠 보드 -->
-        <div id="sudoku-board" class="rounded-sm mb-5 mt-2">
-            <!-- JavaScript를 통해 셀이 생성됩니다 -->
+        <!-- 스도쿠 보드 (시작 전에는 흐리게 가려짐) -->
+        <div id="board-wrap" class="relative mb-5 mt-2 not-started">
+            <div id="sudoku-board" class="rounded-sm">
+                <!-- JavaScript를 통해 셀이 생성됩니다 -->
+            </div>
+            <div id="start-overlay" class="absolute inset-0 flex items-center justify-center">
+                <button id="btn-start" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xl py-4 px-10 rounded-xl shadow-lg transition btn-active">
+                    &#9654; 시작
+                </button>
+            </div>
         </div>
 
         <!-- 하단 컨트롤 패널 -->
@@ -140,11 +175,8 @@
 
             <!-- 액션 버튼 -->
             <div class="flex gap-2 sm:gap-4">
-                <button id="btn-erase" class="flex-1 bg-rose-50 border-2 border-rose-200 text-rose-600 font-bold py-3 px-2 rounded-lg shadow-sm hover:bg-rose-100 transition btn-active text-sm sm:text-base flex items-center justify-center gap-1">
-                    <span>&#9003;</span> 지우기
-                </button>
                 <button id="btn-check" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
-                    오류 검사 (Check)
+                    정답 맞추기
                 </button>
                 <button id="btn-new" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
                     새 게임
@@ -242,6 +274,7 @@
         let boardState = []; // 각 셀의 상태를 객체로 저장
         let selectedCell = null; // {r, c}
         let isGameOver = false;
+        let isStarted = false; // 시작 버튼을 누르기 전에는 보드를 가리고 입력을 막음
 
         // 타이머
         let timerStart = 0;
@@ -252,6 +285,7 @@
         let difficulty = 'normal';
 
         const boardEl = document.getElementById('sudoku-board');
+        const boardWrapEl = document.getElementById('board-wrap');
         const numpadEl = document.getElementById('numpad');
         const msgArea = document.getElementById('message-area');
         const timerEl = document.getElementById('timer');
@@ -259,6 +293,7 @@
         // 게임 초기화
         function initGame() {
             isGameOver = false;
+            isStarted = false;
             selectedCell = null;
             msgArea.style.opacity = '0';
             clearAllErrors();
@@ -285,8 +320,18 @@
             createBoardDOM();
             renderNumpad();
             renderDifficulty();
-            startTimer();
+            stopTimer();
+            timerEl.textContent = formatTime(0);
+            boardWrapEl.classList.add('not-started');
             updateAllHighlights();
+        }
+
+        // 시작 버튼: 보드를 보여주고 타이머 시작
+        function startGame() {
+            if (isStarted) return;
+            isStarted = true;
+            boardWrapEl.classList.remove('not-started');
+            startTimer();
         }
 
         // 초기 보드 HTML 생성
@@ -422,7 +467,7 @@
 
         // 셀 선택 처리
         function selectCell(r, c) {
-            if (isGameOver) return;
+            if (isGameOver || !isStarted) return;
             selectedCell = { r, c };
             updateAllHighlights();
         }
@@ -466,7 +511,7 @@
 
         // 숫자 입력 핵심 로직
         function inputNumber(num) {
-            if (!selectedCell || isGameOver) return;
+            if (!selectedCell || isGameOver || !isStarted) return;
             const { r, c } = selectedCell;
             const state = boardState[r][c];
             
@@ -577,7 +622,7 @@
 
         // 키보드 조작
         window.addEventListener('keydown', (e) => {
-            if (isGameOver) return;
+            if (isGameOver || !isStarted) return;
             
             // 숫자 및 지우기
             if (e.key >= '1' && e.key <= '9') inputNumber(parseInt(e.key));
@@ -604,18 +649,16 @@
                 initGame();
             });
         });
-        document.getElementById('btn-erase').addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            inputNumber(0);
-        });
+        document.getElementById('btn-start').addEventListener('click', startGame);
         document.getElementById('btn-check').addEventListener('click', () => {
+            if (!isStarted) return;
             const hasError = checkMistakes();
             if (!hasError && !checkBoardFull() && !isGameOver) {
                 const checkBtn = document.getElementById('btn-check');
                 const origHTML = checkBtn.innerHTML;
                 const origClass = checkBtn.className;
                 
-                checkBtn.textContent = '현재까지 모순 없음!';
+                checkBtn.textContent = '지금까지 맞아요!';
                 checkBtn.className = 'flex-1 bg-emerald-500 text-white font-semibold py-3 px-4 rounded-lg shadow-sm transition';
                 
                 setTimeout(() => {
