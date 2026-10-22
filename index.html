@@ -16,6 +16,14 @@
     <meta property="og:image:height" content="630">
     <meta property="og:locale" content="ko_KR">
     <meta name="twitter:card" content="summary_large_image">
+
+    <!-- PWA / 홈 화면에 설치 -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#f8fafc">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="스도쿠">
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -650,6 +658,11 @@
 
         // 시작
         window.onload = initGame;
+
+        // 오프라인 지원 (file://로 열면 지원 안 되므로 조용히 넘어감)
+        if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
     </script>
 </body>
 </html>
