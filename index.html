@@ -310,7 +310,7 @@
                     let val = puzzle[r][c];
                     row.push({
                         isGiven: val !== 0,
-                        isNote: false, // 숫자 1개라도 같은 줄/박스에 이미 있으면 메모로 표시
+                        isNote: false, // 숫자 1개라도 같은 줄/박스에 같은 숫자가 있으면 메모로 표시
                         digits: val !== 0 ? new Set([val]) : new Set()
                     });
                 }
@@ -481,8 +481,9 @@
             return Array.from(state.digits)[0];
         }
 
-        // (r, c)와 같은 행/열/3x3 박스에 val이 메인 숫자로 이미 있는지 검사
-        function conflictsWithMain(r, c, val) {
+        // (r, c)와 같은 행/열/3x3 박스의 다른 칸에 val이 단일 숫자로 들어 있는지 검사
+        // 먼저 입력했든 나중에 입력했든 겹치는 칸끼리는 모두 해당됨
+        function hasDuplicate(r, c, val) {
             const startR = Math.floor(r / 3) * 3;
             const startC = Math.floor(c / 3) * 3;
             for (let i = 0; i < 9; i++) {
@@ -490,19 +491,21 @@
                 for (const [pr, pc] of peers) {
                     if (pr === r && pc === c) continue;
                     const peer = boardState[pr][pc];
-                    if (isMain(peer) && mainValue(peer) === val) return true;
+                    if (peer.digits.size === 1 && mainValue(peer) === val) return true;
                 }
             }
             return false;
         }
 
-        // 충돌 때문에 메모로 들어갔던 단일 숫자가 더 이상 충돌하지 않으면 메인 숫자로 승격
-        function promoteResolvedNotes() {
+        // 겹치는 단일 숫자는 메모로, 겹침이 풀린 단일 숫자는 메인 숫자로 다시 계산
+        function refreshNotes() {
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
                     const state = boardState[r][c];
-                    if (state.isNote && state.digits.size === 1 && !conflictsWithMain(r, c, mainValue(state))) {
-                        state.isNote = false;
+                    if (state.isGiven) continue;
+                    const isNote = state.digits.size === 1 && hasDuplicate(r, c, mainValue(state));
+                    if (state.isNote !== isNote) {
+                        state.isNote = isNote;
                         updateCellUI(r, c);
                     }
                 }
@@ -531,11 +534,9 @@
                 }
             }
 
-            // 단일 숫자가 같은 줄/박스의 메인 숫자와 겹치면 메모로 넣음
-            state.isNote = state.digits.size === 1 && conflictsWithMain(r, c, mainValue(state));
-
+            // 같은 줄/박스에서 겹치는 단일 숫자는 먼저 입력한 칸까지 모두 메모로 바꿈
+            refreshNotes();
             updateCellUI(r, c);
-            promoteResolvedNotes();
             updateAllHighlights(); // 동일 숫자 하이라이트 갱신을 위해 호출
             checkWinCondition();
         }
@@ -554,32 +555,11 @@
             let hasError = false;
             let errorSet = new Set();
 
+            // 겹쳐서 메모로 바뀐 단일 숫자 칸을 오류로 표시
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
                     const state = boardState[r][c];
-                    if (!isMain(state)) continue; // 메인 숫자(정답)만 검사
-
-                    const val = mainValue(state);
-
-                    // 가로, 세로, 박스 검사
-                    for (let i = 0; i < 9; i++) {
-                        if (i !== c && isMain(boardState[r][i]) && mainValue(boardState[r][i]) === val) {
-                            errorSet.add(`${r}-${c}`); errorSet.add(`${r}-${i}`);
-                        }
-                        if (i !== r && isMain(boardState[i][c]) && mainValue(boardState[i][c]) === val) {
-                            errorSet.add(`${r}-${c}`); errorSet.add(`${i}-${c}`);
-                        }
-                    }
-                    let startR = Math.floor(r / 3) * 3;
-                    let startC = Math.floor(c / 3) * 3;
-                    for (let i = 0; i < 3; i++) {
-                        for (let j = 0; j < 3; j++) {
-                            let br = startR + i, bc = startC + j;
-                            if ((br !== r || bc !== c) && isMain(boardState[br][bc]) && mainValue(boardState[br][bc]) === val) {
-                                errorSet.add(`${r}-${c}`); errorSet.add(`${br}-${bc}`);
-                            }
-                        }
-                    }
+                    if (state.isNote) errorSet.add(`${r}-${c}`);
                 }
             }
 
