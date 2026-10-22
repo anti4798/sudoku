@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>정통 스도쿠 (Classic Sudoku)</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            touch-action: manipulation;
+        }
+
+        /* 스도쿠 보드 */
+        #sudoku-board {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            border: 3px solid #1e293b;
+            background-color: #ffffff;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 개별 셀 기본 스타일 */
+        .cell {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border: 1px solid #cbd5e1;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        @media (max-width: 400px) {
+            .cell { font-size: 1.25rem; }
+        }
+
+        /* 3x3 구역 굵은 선 */
+        .cell.right-thick { border-right: 3px solid #1e293b; }
+        .cell.bottom-thick { border-bottom: 3px solid #1e293b; }
+
+        /* 셀 내용 상태 */
+        .cell.given {
+            font-weight: 800;
+            color: #0f172a; /* 검정 */
+        }
+        .cell.user-input {
+            font-weight: 600;
+            color: #2563eb; /* 파랑 */
+        }
+
+        /* 하이라이트 상태 */
+        .cell.related {
+            background-color: #f1f5f9; /* 선택된 셀과 같은 행,열,박스 */
+        }
+        .cell.same-number {
+            background-color: #e2e8f0; /* 선택된 셀과 같은 숫자를 가진 셀 */
+        }
+        .cell.selected {
+            background-color: #bfdbfe !important; /* 선택된 셀 */
+        }
+        .cell.error {
+            background-color: #fecaca !important;
+            color: #dc2626 !important;
+            transition: all 0.3s ease;
+        }
+
+        /* 메모 모드 (Pencil Marks) 그리드 스타일 */
+        .notes-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            width: 100%;
+            height: 100%;
+            padding: 2px;
+        }
+        .note-num {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.6rem;
+            color: #64748b; /* 회색 */
+            line-height: 1;
+        }
+        @media (max-width: 400px) {
+            .note-num { font-size: 0.5rem; }
+        }
+
+        /* 버튼 및 기타 UI */
+        .btn-active:active { transform: scale(0.95); }
+        .mode-btn-active {
+            background-color: #10b981 !important; /* 메모 모드 ON 시 색상 (초록) */
+            color: white !important;
+            border-color: #059669 !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-6 px-2 sm:px-4">
+
+    <!-- 헤더 -->
+    <header class="text-center mb-4">
+        <h1 class="text-3xl font-bold tracking-tight text-slate-800">Classic Sudoku</h1>
+    </header>
+
+    <div class="w-full max-w-md">
+        
+        <!-- 스도쿠 보드 -->
+        <div id="sudoku-board" class="rounded-sm mb-5 mt-2">
+            <!-- JavaScript를 통해 셀이 생성됩니다 -->
+        </div>
+
+        <!-- 하단 컨트롤 패널 -->
+        <div class="space-y-4">
+            <!-- 숫자 입력 패드 -->
+            <div class="grid grid-cols-9 gap-1 sm:gap-2" id="numpad">
+                <!-- 1~9 버튼 JS로 추가 -->
+            </div>
+
+            <!-- 액션 버튼 -->
+            <div class="flex gap-2 sm:gap-4">
+                <button id="btn-erase" class="flex-1 bg-rose-50 border-2 border-rose-200 text-rose-600 font-bold py-3 px-2 rounded-lg shadow-sm hover:bg-rose-100 transition btn-active text-sm sm:text-base flex items-center justify-center gap-1">
+                    <span>&#9003;</span> 지우기
+                </button>
+                <button id="btn-check" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
+                    오류 검사 (Check)
+                </button>
+                <button id="btn-new" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
+                    새 게임
+                </button>
+            </div>
+            
+            <!-- 상태 메시지 -->
+            <div id="message-area" class="text-center font-bold text-lg text-emerald-600 h-8 opacity-0 transition-opacity flex items-center justify-center">
+                축하합니다! 스도쿠를 완성했습니다!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 스도쿠 생성 알고리즘 (백트래킹) ---
+        class SudokuGenerator {
+            constructor(K = 45) {
+                this.N = 9;
+                this.SRN = 3;
+                this.K = K;
+                this.mat = Array.from({ length: this.N }, () => Array(this.N).fill(0));
+            }
+            fillValues() {
+                this.fillDiagonal();
+                this.fillRemaining(0, this.SRN);
+                let solution = this.mat.map(row => [...row]);
+                this.removeKDigits();
+                return { puzzle: this.mat, solution: solution };
+            }
+            fillDiagonal() {
+                for (let i = 0; i < this.N; i = i + this.SRN) this.fillBox(i, i);
+            }
+            unUsedInBox(rowStart, colStart, num) {
+                for (let i = 0; i < this.SRN; i++)
+                    for (let j = 0; j < this.SRN; j++)
+                        if (this.mat[rowStart + i][colStart + j] === num) return false;
+                return true;
+            }
+            fillBox(rowStart, colStart) {
+                let num;
+                for (let i = 0; i < this.SRN; i++) {
+                    for (let j = 0; j < this.SRN; j++) {
+                        do { num = Math.floor(Math.random() * this.N + 1); }
+                        while (!this.unUsedInBox(rowStart, colStart, num));
+                        this.mat[rowStart + i][colStart + j] = num;
+                    }
+                }
+            }
+            checkIfSafe(i, j, num) {
+                return (this.unUsedInRow(i, num) && this.unUsedInCol(j, num) && this.unUsedInBox(i - (i % this.SRN), j - (j % this.SRN), num));
+            }
+            unUsedInRow(i, num) {
+                for (let j = 0; j < this.N; j++) if (this.mat[i][j] === num) return false;
+                return true;
+            }
+            unUsedInCol(j, num) {
+                for (let i = 0; i < this.N; i++) if (this.mat[i][j] === num) return false;
+                return true;
+            }
+            fillRemaining(i, j) {
+                if (j >= this.N && i < this.N - 1) { i = i + 1; j = 0; }
+                if (i >= this.N && j >= this.N) return true;
+                if (i < this.SRN) { if (j < this.SRN) j = this.SRN; }
+                else if (i < this.N - this.SRN) { if (j === Math.floor(i / this.SRN) * this.SRN) j = j + this.SRN; }
+                else {
+                    if (j === this.N - this.SRN) {
+                        i = i + 1; j = 0;
+                        if (i >= this.N) return true;
+                    }
+                }
+                for (let num = 1; num <= this.N; num++) {
+                    if (this.checkIfSafe(i, j, num)) {
+                        this.mat[i][j] = num;
+                        if (this.fillRemaining(i, j + 1)) return true;
+                        this.mat[i][j] = 0;
+                    }
+                }
+                return false;
+            }
+            removeKDigits() {
+                let count = this.K;
+                while (count !== 0) {
+                    let cellId = Math.floor(Math.random() * (this.N * this.N));
+                    let i = Math.floor(cellId / this.N);
+                    let j = cellId % 9;
+                    if (this.mat[i][j] !== 0) {
+                        count--;
+                        this.mat[i][j] = 0;
+                    }
+                }
+            }
+        }
+
+        // --- 상태 관리 ---
+        let boardState = []; // 각 셀의 상태를 객체로 저장
+        let selectedCell = null; // {r, c}
+        let isGameOver = false;
+
+        const boardEl = document.getElementById('sudoku-board');
+        const numpadEl = document.getElementById('numpad');
+        const msgArea = document.getElementById('message-area');
+
+        // 게임 초기화
+        function initGame() {
+            isGameOver = false;
+            selectedCell = null;
+            msgArea.style.opacity = '0';
+            clearAllErrors();
+            
+            // 난이도에 따른 빈칸 개수 (45개)
+            const sudoku = new SudokuGenerator(45);
+            const { puzzle } = sudoku.fillValues();
+            
+            // 데이터 구조화: Set을 사용하여 입력된 모든 숫자를 관리합니다.
+            boardState = [];
+            for (let r = 0; r < 9; r++) {
+                let row = [];
+                for (let c = 0; c < 9; c++) {
+                    let val = puzzle[r][c];
+                    row.push({
+                        isGiven: val !== 0,
+                        digits: val !== 0 ? new Set([val]) : new Set()
+                    });
+                }
+                boardState.push(row);
+            }
+
+            createBoardDOM();
+            renderNumpad();
+            updateAllHighlights();
+        }
+
+        // 초기 보드 HTML 생성
+        function createBoardDOM() {
+            boardEl.innerHTML = '';
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = `cell-${r}-${c}`;
+                    
+                    if (c === 2 || c === 5) cell.classList.add('right-thick');
+                    if (r === 2 || r === 5) cell.classList.add('bottom-thick');
+
+                    cell.addEventListener('mousedown', () => selectCell(r, c));
+                    boardEl.appendChild(cell);
+                    
+                    updateCellUI(r, c); // 내용 채우기
+                }
+            }
+        }
+
+        // 개별 셀의 화면(DOM) 업데이트 로직
+        function updateCellUI(r, c) {
+            const cellEl = document.getElementById(`cell-${r}-${c}`);
+            const state = boardState[r][c];
+            
+            // 기존 텍스트/노드 지우기 및 클래스 초기화
+            cellEl.innerHTML = '';
+            cellEl.classList.remove('given', 'user-input');
+            
+            if (state.digits.size === 1) {
+                // 숫자가 1개일 때: 정답(메인 숫자)으로 취급
+                const val = Array.from(state.digits)[0];
+                cellEl.textContent = val;
+                cellEl.classList.add(state.isGiven ? 'given' : 'user-input');
+            } else if (state.digits.size > 1) {
+                // 숫자가 2개 이상일 때: 메모(노트) 3x3 그리드로 취급
+                const grid = document.createElement('div');
+                grid.className = 'notes-grid';
+                for(let i = 1; i <= 9; i++) {
+                    const noteSpan = document.createElement('div');
+                    noteSpan.className = 'note-num';
+                    if (state.digits.has(i)) {
+                        noteSpan.textContent = i;
+                    }
+                    grid.appendChild(noteSpan);
+                }
+                cellEl.appendChild(grid);
+            }
+        }
+
+        // 하이라이트 로직 (관련 행/열/박스 및 같은 숫자 강조)
+        function updateAllHighlights() {
+            // 모든 하이라이트 제거
+            document.querySelectorAll('.cell').forEach(el => {
+                el.classList.remove('selected', 'related', 'same-number');
+            });
+
+            if (!selectedCell) return;
+
+            const { r, c } = selectedCell;
+            const selectedState = boardState[r][c];
+            const selectedVal = selectedState.digits.size === 1 ? Array.from(selectedState.digits)[0] : null;
+
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const cellEl = document.getElementById(`cell-${i}-${j}`);
+                    const cellState = boardState[i][j];
+                    
+                    // 1. 선택된 셀
+                    if (i === r && j === c) {
+                        cellEl.classList.add('selected');
+                    }
+                    // 2. 관련 영역 (행, 열, 3x3 박스)
+                    else if (i === r || j === c || (Math.floor(i/3) === Math.floor(r/3) && Math.floor(j/3) === Math.floor(c/3))) {
+                        cellEl.classList.add('related');
+                    }
+                    // 3. 동일한 숫자 하이라이트 (단일 숫자일 때만)
+                    if (selectedVal !== null && cellState.digits.size === 1 && Array.from(cellState.digits)[0] === selectedVal && (i !== r || j !== c)) {
+                        cellEl.classList.add('same-number');
+                    }
+                }
+            }
+        }
+
+        // 숫자 패드 생성
+        function renderNumpad() {
+            numpadEl.innerHTML = '';
+            for (let i = 1; i <= 9; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'bg-white border-2 border-slate-200 text-slate-800 font-bold py-3 rounded-lg shadow-sm hover:bg-slate-50 btn-active text-lg sm:text-xl';
+                btn.textContent = i;
+                btn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    inputNumber(i);
+                });
+                numpadEl.appendChild(btn);
+            }
+        }
+
+        // 셀 선택 처리
+        function selectCell(r, c) {
+            if (isGameOver) return;
+            selectedCell = { r, c };
+            updateAllHighlights();
+        }
+
+        // 숫자 입력 핵심 로직
+        function inputNumber(num) {
+            if (!selectedCell || isGameOver) return;
+            const { r, c } = selectedCell;
+            const state = boardState[r][c];
+            
+            if (state.isGiven) return; // 기본 숫자는 수정 불가
+
+            clearAllErrors(); // 새 입력 시 기존 에러 시각효과 지움
+
+            if (num === 0) {
+                // 지우기
+                state.digits.clear();
+            } else {
+                // 입력된 숫자 토글 (있으면 제거, 없으면 추가)
+                if (state.digits.has(num)) {
+                    state.digits.delete(num);
+                } else {
+                    state.digits.add(num);
+                }
+            }
+
+            updateCellUI(r, c);
+            updateAllHighlights(); // 동일 숫자 하이라이트 갱신을 위해 호출
+            checkWinCondition();
+        }
+
+        // 에러 표시 제거
+        function clearAllErrors() {
+            document.querySelectorAll('.cell.error').forEach(el => {
+                el.classList.remove('error');
+            });
+        }
+
+        // 논리적 오류 검사 (Check)
+        function checkMistakes() {
+            if (isGameOver) return;
+            clearAllErrors();
+            let hasError = false;
+            let errorSet = new Set();
+
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const state = boardState[r][c];
+                    if (state.digits.size !== 1) continue; // 단일 숫자(정답)만 검사
+
+                    const val = Array.from(state.digits)[0];
+
+                    // 가로, 세로, 박스 검사
+                    for (let i = 0; i < 9; i++) {
+                        if (i !== c && boardState[r][i].digits.size === 1 && Array.from(boardState[r][i].digits)[0] === val) {
+                            errorSet.add(`${r}-${c}`); errorSet.add(`${r}-${i}`);
+                        }
+                        if (i !== r && boardState[i][c].digits.size === 1 && Array.from(boardState[i][c].digits)[0] === val) {
+                            errorSet.add(`${r}-${c}`); errorSet.add(`${i}-${c}`);
+                        }
+                    }
+                    let startR = Math.floor(r / 3) * 3;
+                    let startC = Math.floor(c / 3) * 3;
+                    for (let i = 0; i < 3; i++) {
+                        for (let j = 0; j < 3; j++) {
+                            let br = startR + i, bc = startC + j;
+                            if ((br !== r || bc !== c) && boardState[br][bc].digits.size === 1 && Array.from(boardState[br][bc].digits)[0] === val) {
+                                errorSet.add(`${r}-${c}`); errorSet.add(`${br}-${bc}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            errorSet.forEach(id => {
+                document.getElementById(`cell-${id}`).classList.add('error');
+                hasError = true;
+            });
+
+            return hasError;
+        }
+
+        // 모든 메인 숫자가 채워졌는지 확인
+        function checkBoardFull() {
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    // 모든 칸이 정확히 1개의 숫자만을 가지고 있어야 완성
+                    if (boardState[r][c].digits.size !== 1) return false;
+                }
+            }
+            return true;
+        }
+
+        // 승리 조건 체크
+        function checkWinCondition() {
+            if (checkBoardFull()) {
+                if(!checkMistakes()) {
+                    isGameOver = true;
+                    selectedCell = null;
+                    updateAllHighlights();
+                    msgArea.style.opacity = '1';
+                }
+            }
+        }
+
+        // --- 이벤트 리스너 설정 ---
+
+        // 키보드 조작
+        window.addEventListener('keydown', (e) => {
+            if (isGameOver) return;
+            
+            // 숫자 및 지우기
+            if (e.key >= '1' && e.key <= '9') inputNumber(parseInt(e.key));
+            else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') inputNumber(0);
+            
+            // 방향키 이동
+            else if (selectedCell && e.key.startsWith('Arrow')) {
+                e.preventDefault();
+                let { r, c } = selectedCell;
+                if (e.key === 'ArrowUp' && r > 0) r--;
+                if (e.key === 'ArrowDown' && r < 8) r++;
+                if (e.key === 'ArrowLeft' && c > 0) c--;
+                if (e.key === 'ArrowRight' && c < 8) c++;
+                selectCell(r, c);
+            }
+        });
+
+        // 버튼 클릭
+        document.getElementById('btn-new').addEventListener('click', initGame);
+        document.getElementById('btn-erase').addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            inputNumber(0);
+        });
+        document.getElementById('btn-check').addEventListener('click', () => {
+            const hasError = checkMistakes();
+            if (!hasError && !checkBoardFull() && !isGameOver) {
+                const checkBtn = document.getElementById('btn-check');
+                const origHTML = checkBtn.innerHTML;
+                const origClass = checkBtn.className;
+                
+                checkBtn.textContent = '현재까지 모순 없음!';
+                checkBtn.className = 'flex-1 bg-emerald-500 text-white font-semibold py-3 px-4 rounded-lg shadow-sm transition';
+                
+                setTimeout(() => {
+                    checkBtn.innerHTML = origHTML;
+                    checkBtn.className = origClass;
+                }, 1500);
+            }
+        });
+
+        // 시작
+        window.onload = initGame;
+    </script>
+</body>
+</html>
