@@ -114,6 +114,7 @@
     <!-- 헤더 -->
     <header class="text-center mb-4">
         <h1 class="text-3xl font-bold tracking-tight text-slate-800">Classic Sudoku</h1>
+        <div id="timer" class="mt-1 text-lg font-semibold text-slate-500 tabular-nums">00:00</div>
     </header>
 
     <div class="w-full max-w-md">
@@ -242,6 +243,10 @@
         let selectedCell = null; // {r, c}
         let isGameOver = false;
 
+        // 타이머
+        let timerStart = 0;
+        let timerInterval = null;
+
         // 난이도별 빈칸 개수
         const DIFFICULTY_BLANKS = { easy: 35, normal: 45, hard: 55 };
         let difficulty = 'normal';
@@ -249,6 +254,7 @@
         const boardEl = document.getElementById('sudoku-board');
         const numpadEl = document.getElementById('numpad');
         const msgArea = document.getElementById('message-area');
+        const timerEl = document.getElementById('timer');
 
         // 게임 초기화
         function initGame() {
@@ -279,6 +285,7 @@
             createBoardDOM();
             renderNumpad();
             renderDifficulty();
+            startTimer();
             updateAllHighlights();
         }
 
@@ -379,6 +386,31 @@
                 });
                 numpadEl.appendChild(btn);
             }
+        }
+
+        // 경과 시간(초)을 mm:ss 형식으로 변환
+        function formatTime(seconds) {
+            const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const s = String(seconds % 60).padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function elapsedSeconds() {
+            return Math.floor((Date.now() - timerStart) / 1000);
+        }
+
+        function startTimer() {
+            stopTimer();
+            timerStart = Date.now();
+            timerEl.textContent = formatTime(0);
+            timerInterval = setInterval(() => {
+                timerEl.textContent = formatTime(elapsedSeconds());
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
         }
 
         // 현재 난이도 버튼 강조
@@ -531,7 +563,11 @@
                 if(!checkMistakes()) {
                     isGameOver = true;
                     selectedCell = null;
+                    stopTimer();
+                    const clearTime = formatTime(elapsedSeconds());
+                    timerEl.textContent = clearTime;
                     updateAllHighlights();
+                    msgArea.textContent = `축하합니다! 스도쿠를 완성했습니다! (기록 ${clearTime})`;
                     msgArea.style.opacity = '1';
                 }
             }
