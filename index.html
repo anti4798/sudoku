@@ -93,6 +93,13 @@
             .note-num { font-size: 0.5rem; }
         }
 
+        /* 난이도 선택 버튼 */
+        .difficulty-btn.active {
+            background-color: #1e293b;
+            color: #ffffff;
+            border-color: #1e293b;
+        }
+
         /* 버튼 및 기타 UI */
         .btn-active:active { transform: scale(0.95); }
         .mode-btn-active {
@@ -110,7 +117,14 @@
     </header>
 
     <div class="w-full max-w-md">
-        
+
+        <!-- 난이도 선택 -->
+        <div class="grid grid-cols-3 gap-2" id="difficulty">
+            <button data-level="easy" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">쉬움</button>
+            <button data-level="normal" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">보통</button>
+            <button data-level="hard" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">어려움</button>
+        </div>
+
         <!-- 스도쿠 보드 -->
         <div id="sudoku-board" class="rounded-sm mb-5 mt-2">
             <!-- JavaScript를 통해 셀이 생성됩니다 -->
@@ -228,6 +242,10 @@
         let selectedCell = null; // {r, c}
         let isGameOver = false;
 
+        // 난이도별 빈칸 개수
+        const DIFFICULTY_BLANKS = { easy: 35, normal: 45, hard: 55 };
+        let difficulty = 'normal';
+
         const boardEl = document.getElementById('sudoku-board');
         const numpadEl = document.getElementById('numpad');
         const msgArea = document.getElementById('message-area');
@@ -239,8 +257,8 @@
             msgArea.style.opacity = '0';
             clearAllErrors();
             
-            // 난이도에 따른 빈칸 개수 (45개)
-            const sudoku = new SudokuGenerator(45);
+            // 난이도에 따른 빈칸 개수
+            const sudoku = new SudokuGenerator(DIFFICULTY_BLANKS[difficulty]);
             const { puzzle } = sudoku.fillValues();
             
             // 데이터 구조화: Set을 사용하여 입력된 모든 숫자를 관리합니다.
@@ -260,6 +278,7 @@
 
             createBoardDOM();
             renderNumpad();
+            renderDifficulty();
             updateAllHighlights();
         }
 
@@ -360,6 +379,13 @@
                 });
                 numpadEl.appendChild(btn);
             }
+        }
+
+        // 현재 난이도 버튼 강조
+        function renderDifficulty() {
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.level === difficulty);
+            });
         }
 
         // 셀 선택 처리
@@ -535,6 +561,13 @@
 
         // 버튼 클릭
         document.getElementById('btn-new').addEventListener('click', initGame);
+        document.querySelectorAll('.difficulty-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // 난이도를 바꾸면 해당 난이도로 새 게임 시작
+                difficulty = btn.dataset.level;
+                initGame();
+            });
+        });
         document.getElementById('btn-erase').addEventListener('mousedown', (e) => {
             e.preventDefault();
             inputNumber(0);
