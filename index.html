@@ -39,7 +39,8 @@
         /* 스도쿠 보드 */
         #sudoku-board {
             display: grid;
-            grid-template-columns: repeat(9, 1fr);
+            /* minmax(0, 1fr): 셀 내용(메모 등) 크기 때문에 칸이 늘어나지 않도록 고정 */
+            grid-template-columns: repeat(9, minmax(0, 1fr));
             border: 3px solid #1e293b;
             background-color: #ffffff;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
@@ -72,6 +73,9 @@
             cursor: pointer;
             user-select: none;
             position: relative;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
         }
 
         @media (max-width: 400px) {
@@ -113,8 +117,9 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(3, 1fr);
-            width: 100%;
-            height: 100%;
+            /* 셀 크기 계산에 끼어들지 않도록 절대 위치로 셀을 덮음 (iOS Safari에서 셀이 커지는 문제) */
+            position: absolute;
+            inset: 0;
             padding: 2px;
         }
         .note-num {
