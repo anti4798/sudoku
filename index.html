@@ -26,50 +26,117 @@
     <meta name="apple-mobile-web-app-title" content="스도쿠">
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' };
+
+        // 다크 모드: 직접 고른 테마가 있으면 그걸, 없으면 기기 설정을 따름 (화면이 번쩍이지 않게 head에서 바로 적용)
+        const THEME_KEY = 'sudoku-theme';
+        const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        function savedTheme() {
+            try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+        }
+        function isDarkTheme() {
+            const theme = savedTheme();
+            return theme ? theme === 'dark' : darkQuery.matches;
+        }
+        function applyTheme() {
+            const dark = isDarkTheme();
+            document.documentElement.classList.toggle('dark', dark);
+            document.querySelector('meta[name="theme-color"]').content = dark ? '#0f172a' : '#f8fafc';
+            if (window.renderThemeIcon) renderThemeIcon();
+        }
+        applyTheme();
+        darkQuery.addEventListener('change', applyTheme);
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         
+        :root {
+            --page-bg: #f8fafc;
+            --page-text: #0f172a;
+            --board-line: #1e293b;
+            --board-bg: #ffffff;
+            --cell-line: #cbd5e1;
+            --given: #0f172a;
+            --user-input: #2563eb;
+            --related: #f1f5f9;
+            --same-number: #e2e8f0;
+            --selected: #bfdbfe;
+            --error-bg: #fecaca;
+            --error-text: #dc2626;
+            --note: #64748b;
+            --active-bg: #1e293b;
+            --active-text: #ffffff;
+        }
+        html.dark {
+            color-scheme: dark;
+            --page-bg: #0f172a;
+            --page-text: #e2e8f0;
+            --board-line: #94a3b8;
+            --board-bg: #1e293b;
+            --cell-line: #334155;
+            --given: #f1f5f9;
+            --user-input: #60a5fa;
+            --related: #273449;
+            --same-number: #334155;
+            --selected: #1e40af;
+            --error-bg: #7f1d1d;
+            --error-text: #fca5a5;
+            --note: #94a3b8;
+            --active-bg: #e2e8f0;
+            --active-text: #0f172a;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            color: #0f172a;
+            background-color: var(--page-bg);
+            color: var(--page-text);
             touch-action: manipulation;
+            /* iOS Safari는 접두어 버전만 인식: 연타 시 글자 선택/돋보기/길게 누르기 메뉴가 뜨지 않게 함 */
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         /* 스도쿠 보드 */
+        /* 보드 전체를 정사각형으로 두고 9x9로 똑같이 나눔.
+           칸 크기가 글자 크기와 무관해야 카카오톡 인앱 브라우저 등에서 글자를 키워도 보드가 밀려나지 않음 */
         #sudoku-board {
             display: grid;
-            /* minmax(0, 1fr): 셀 내용(메모 등) 크기 때문에 칸이 늘어나지 않도록 고정 */
             grid-template-columns: repeat(9, minmax(0, 1fr));
-            border: 3px solid #1e293b;
-            background-color: #ffffff;
+            grid-template-rows: repeat(9, minmax(0, 1fr));
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            border: 3px solid var(--board-line);
+            background-color: var(--board-bg);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
 
-        /* 시작 전: 보드를 흐리게 가려서 미리 풀지 못하게 함 */
+        /* 시작 전/일시정지 중: 보드를 흐리게 가려서 미리 풀지 못하게 함 */
         #sudoku-board {
             transition: filter 0.4s ease;
         }
-        #board-wrap.not-started #sudoku-board {
+        #board-wrap.covered #sudoku-board {
             filter: blur(10px);
             pointer-events: none;
         }
         #start-overlay {
             transition: opacity 0.4s ease;
         }
-        #board-wrap:not(.not-started) #start-overlay {
+        #board-wrap:not(.covered) #start-overlay {
             opacity: 0;
             pointer-events: none;
         }
 
         /* 개별 셀 기본 스타일 */
         .cell {
-            aspect-ratio: 1 / 1;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
-            border: 1px solid #cbd5e1;
+            line-height: 1;
+            border: 1px solid var(--cell-line);
             cursor: pointer;
             user-select: none;
             position: relative;
@@ -83,32 +150,32 @@
         }
 
         /* 3x3 구역 굵은 선 */
-        .cell.right-thick { border-right: 3px solid #1e293b; }
-        .cell.bottom-thick { border-bottom: 3px solid #1e293b; }
+        .cell.right-thick { border-right: 3px solid var(--board-line); }
+        .cell.bottom-thick { border-bottom: 3px solid var(--board-line); }
 
         /* 셀 내용 상태 */
         .cell.given {
             font-weight: 800;
-            color: #0f172a; /* 검정 */
+            color: var(--given); /* 검정 */
         }
         .cell.user-input {
             font-weight: 600;
-            color: #2563eb; /* 파랑 */
+            color: var(--user-input); /* 파랑 */
         }
 
         /* 하이라이트 상태 */
         .cell.related {
-            background-color: #f1f5f9; /* 선택된 셀과 같은 행,열,박스 */
+            background-color: var(--related); /* 선택된 셀과 같은 행,열,박스 */
         }
         .cell.same-number {
-            background-color: #e2e8f0; /* 선택된 셀과 같은 숫자를 가진 셀 */
+            background-color: var(--same-number); /* 선택된 셀과 같은 숫자를 가진 셀 */
         }
         .cell.selected {
-            background-color: #bfdbfe !important; /* 선택된 셀 */
+            background-color: var(--selected) !important; /* 선택된 셀 */
         }
         .cell.error {
-            background-color: #fecaca !important;
-            color: #dc2626 !important;
+            background-color: var(--error-bg) !important;
+            color: var(--error-text) !important;
             transition: all 0.3s ease;
         }
 
@@ -127,7 +194,7 @@
             align-items: center;
             justify-content: center;
             font-size: 0.6rem;
-            color: #64748b; /* 회색 */
+            color: var(--note); /* 회색 */
             line-height: 1;
         }
         @media (max-width: 400px) {
@@ -135,10 +202,11 @@
         }
 
         /* 난이도 선택 버튼 */
-        .difficulty-btn.active {
-            background-color: #1e293b;
-            color: #ffffff;
-            border-color: #1e293b;
+        /* id까지 붙여서 Tailwind의 dark: 색상보다 우선 적용 */
+        #difficulty .difficulty-btn.active {
+            background-color: var(--active-bg);
+            color: var(--active-text);
+            border-color: var(--active-bg);
         }
 
         /* 버튼 및 기타 UI */
@@ -153,29 +221,31 @@
 <body class="min-h-screen flex flex-col items-center py-6 px-2 sm:px-4">
 
     <!-- 헤더 -->
-    <header class="text-center mb-4">
-        <h1 class="text-3xl font-bold tracking-tight text-slate-800">스도쿠</h1>
-        <div id="timer" class="mt-1 text-lg font-semibold text-slate-500 tabular-nums">00:00</div>
+    <header class="relative w-full max-w-md text-center mb-4">
+        <button id="btn-theme" class="absolute right-0 top-0 w-9 h-9 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 transition btn-active"></button>
+        <h1 class="text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">스도쿠</h1>
+        <div class="mt-1 flex items-center justify-center gap-1">
+            <div id="timer" class="text-lg font-semibold text-slate-500 dark:text-slate-400 tabular-nums">00:00</div>
+            <button id="btn-pause" class="invisible w-8 h-8 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 transition btn-active" aria-label="일시정지"></button>
+        </div>
     </header>
 
     <div class="w-full max-w-md">
 
         <!-- 난이도 선택 -->
         <div class="grid grid-cols-3 gap-2" id="difficulty">
-            <button data-level="easy" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">쉬움</button>
-            <button data-level="normal" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">보통</button>
-            <button data-level="hard" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">어려움</button>
+            <button data-level="easy" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">쉬움</button>
+            <button data-level="normal" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">보통</button>
+            <button data-level="hard" class="difficulty-btn bg-white border-2 border-slate-200 text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 font-semibold py-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">어려움</button>
         </div>
 
         <!-- 스도쿠 보드 (시작 전에는 흐리게 가려짐) -->
-        <div id="board-wrap" class="relative mb-5 mt-2 not-started">
+        <div id="board-wrap" class="relative mb-5 mt-2 covered">
             <div id="sudoku-board" class="rounded-sm">
                 <!-- JavaScript를 통해 셀이 생성됩니다 -->
             </div>
             <div id="start-overlay" class="absolute inset-0 flex items-center justify-center">
-                <button id="btn-start" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xl py-4 px-10 rounded-xl shadow-lg transition btn-active">
-                    &#9654; 시작
-                </button>
+                <button id="btn-start" class="bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 font-bold text-xl py-4 px-10 rounded-xl shadow-lg transition btn-active">&#9654; 시작</button>
             </div>
         </div>
 
@@ -191,13 +261,13 @@
                 <button id="btn-check" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
                     정답 맞추기
                 </button>
-                <button id="btn-new" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
+                <button id="btn-new" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-100 font-semibold py-3 px-2 rounded-lg shadow-sm transition btn-active text-sm sm:text-base">
                     새 게임
                 </button>
             </div>
             
             <!-- 상태 메시지 -->
-            <div id="message-area" class="text-center font-bold text-lg text-emerald-600 h-8 opacity-0 transition-opacity flex items-center justify-center">
+            <div id="message-area" class="text-center font-bold text-lg text-emerald-600 dark:text-emerald-400 h-8 opacity-0 transition-opacity flex items-center justify-center">
                 축하합니다! 스도쿠를 완성했습니다!
             </div>
         </div>
@@ -288,10 +358,20 @@
         let selectedCell = null; // {r, c}
         let isGameOver = false;
         let isStarted = false; // 시작 버튼을 누르기 전에는 보드를 가리고 입력을 막음
+        let isPaused = false; // 일시정지 중에도 보드를 가리고 입력을 막음
 
-        // 타이머
-        let timerStart = 0;
+        // 타이머: 멈출 때마다 지난 시간을 elapsedMs에 쌓아 두고, 돌아가는 동안은 runningSince부터 더함
+        let elapsedMs = 0;
+        let runningSince = null;
         let timerInterval = null;
+
+        // 진행 상황 저장 (브라우저 localStorage)
+        const SAVE_KEY = 'sudoku-save-v1';
+
+        const PAUSE_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+        const MOON_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+        const SUN_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
+        const PLAY_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>';
 
         // 난이도별 빈칸 개수
         const DIFFICULTY_BLANKS = { easy: 35, normal: 45, hard: 55 };
@@ -302,15 +382,24 @@
         const numpadEl = document.getElementById('numpad');
         const msgArea = document.getElementById('message-area');
         const timerEl = document.getElementById('timer');
+        const startBtn = document.getElementById('btn-start');
+        const pauseBtn = document.getElementById('btn-pause');
+        const themeBtn = document.getElementById('btn-theme');
+
+        // 다크 모드 버튼: 지금 테마의 반대로 바꿀 수 있다는 걸 아이콘으로 보여줌
+        function renderThemeIcon() {
+            const dark = isDarkTheme();
+            themeBtn.innerHTML = dark ? SUN_ICON : MOON_ICON;
+            themeBtn.setAttribute('aria-label', dark ? '라이트 모드' : '다크 모드');
+        }
+        renderThemeIcon();
+        themeBtn.addEventListener('click', () => {
+            try { localStorage.setItem(THEME_KEY, isDarkTheme() ? 'light' : 'dark'); } catch (e) {}
+            applyTheme();
+        });
 
         // 게임 초기화
         function initGame() {
-            isGameOver = false;
-            isStarted = false;
-            selectedCell = null;
-            msgArea.style.opacity = '0';
-            clearAllErrors();
-            
             // 난이도에 따른 빈칸 개수
             const sudoku = new SudokuGenerator(DIFFICULTY_BLANKS[difficulty]);
             const { puzzle } = sudoku.fillValues();
@@ -330,21 +419,104 @@
                 boardState.push(row);
             }
 
+            isStarted = false;
+            isPaused = false;
+            resetTimer(0);
+            setupBoard();
+            saveGame();
+        }
+
+        // 저장된 게임 불러오기 (없거나 깨졌으면 false)
+        function restoreGame() {
+            let data;
+            try {
+                data = JSON.parse(localStorage.getItem(SAVE_KEY));
+            } catch (e) {
+                return false;
+            }
+            if (!data || !Array.isArray(data.cells) || data.cells.length !== 9 ||
+                !data.cells.every(row => Array.isArray(row) && row.length === 9)) return false;
+
+            difficulty = data.difficulty in DIFFICULTY_BLANKS ? data.difficulty : 'normal';
+            boardState = data.cells.map(row => row.map(cell => ({
+                isGiven: !!cell.given,
+                isNote: false, // setupBoard에서 다시 계산
+                digits: new Set(cell.digits)
+            })));
+
+            // 이어서 할 때는 일시정지 상태로 열어서, 계속 버튼을 눌러야 타이머가 다시 돎
+            isStarted = !!data.isStarted;
+            isPaused = isStarted;
+            resetTimer(Number(data.elapsedMs) || 0);
+            setupBoard();
+            return true;
+        }
+
+        // 현재 게임을 localStorage에 저장 (사생활 보호 모드 등에서 실패하면 조용히 넘어감)
+        function saveGame() {
+            try {
+                localStorage.setItem(SAVE_KEY, JSON.stringify({
+                    difficulty,
+                    isStarted,
+                    elapsedMs: currentElapsedMs(),
+                    cells: boardState.map(row => row.map(state => ({
+                        given: state.isGiven,
+                        digits: Array.from(state.digits)
+                    })))
+                }));
+            } catch (e) {}
+        }
+
+        function clearSave() {
+            try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+        }
+
+        // 새 게임과 불러온 게임이 공통으로 쓰는 화면 준비
+        function setupBoard() {
+            isGameOver = false;
+            selectedCell = null;
+            msgArea.style.opacity = '0';
+            clearAllErrors();
             createBoardDOM();
+            refreshNotes();
             renderNumpad();
             renderDifficulty();
-            stopTimer();
-            timerEl.textContent = formatTime(0);
-            boardWrapEl.classList.add('not-started');
+            renderCover();
             updateAllHighlights();
+        }
+
+        // 시작 전/일시정지 중이면 보드를 가리고, 시작·계속 버튼과 일시정지 아이콘을 상태에 맞춤
+        function renderCover() {
+            boardWrapEl.classList.toggle('covered', !isStarted || isPaused);
+            startBtn.innerHTML = isStarted ? '&#9654; 계속' : '&#9654; 시작';
+            pauseBtn.classList.toggle('invisible', !isStarted || isGameOver);
+            pauseBtn.innerHTML = isPaused ? PLAY_ICON : PAUSE_ICON;
+            pauseBtn.setAttribute('aria-label', isPaused ? '계속' : '일시정지');
         }
 
         // 시작 버튼: 보드를 보여주고 타이머 시작
         function startGame() {
             if (isStarted) return;
             isStarted = true;
-            boardWrapEl.classList.remove('not-started');
+            renderCover();
             startTimer();
+            saveGame();
+        }
+
+        function pauseGame() {
+            if (!isStarted || isPaused || isGameOver) return;
+            isPaused = true;
+            stopTimer();
+            renderCover();
+            saveGame();
+        }
+
+        function resumeGame() {
+            if (!isPaused) return;
+            isPaused = false;
+            renderCover();
+            startTimer();
+            saveGame();
         }
 
         // 초기 보드 HTML 생성
@@ -436,7 +608,7 @@
             numpadEl.innerHTML = '';
             for (let i = 1; i <= 9; i++) {
                 const btn = document.createElement('button');
-                btn.className = 'bg-white border-2 border-slate-200 text-slate-800 font-bold py-3 rounded-lg shadow-sm hover:bg-slate-50 btn-active text-lg sm:text-xl';
+                btn.className = 'bg-white border-2 border-slate-200 text-slate-800 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-700 font-bold py-3 rounded-lg shadow-sm btn-active text-lg sm:text-xl';
                 btn.textContent = i;
                 btn.addEventListener('mousedown', (e) => {
                     e.preventDefault();
@@ -453,22 +625,37 @@
             return `${m}:${s}`;
         }
 
+        function currentElapsedMs() {
+            return elapsedMs + (runningSince !== null ? Date.now() - runningSince : 0);
+        }
+
         function elapsedSeconds() {
-            return Math.floor((Date.now() - timerStart) / 1000);
+            return Math.floor(currentElapsedMs() / 1000);
+        }
+
+        function renderTimer() {
+            timerEl.textContent = formatTime(elapsedSeconds());
         }
 
         function startTimer() {
-            stopTimer();
-            timerStart = Date.now();
-            timerEl.textContent = formatTime(0);
-            timerInterval = setInterval(() => {
-                timerEl.textContent = formatTime(elapsedSeconds());
-            }, 1000);
+            if (runningSince !== null) return;
+            runningSince = Date.now();
+            renderTimer();
+            timerInterval = setInterval(renderTimer, 1000);
         }
 
+        // 지금까지 흐른 시간을 쌓아 두고 멈춤
         function stopTimer() {
+            elapsedMs = currentElapsedMs();
+            runningSince = null;
             clearInterval(timerInterval);
             timerInterval = null;
+        }
+
+        function resetTimer(ms) {
+            stopTimer();
+            elapsedMs = ms;
+            renderTimer();
         }
 
         // 현재 난이도 버튼 강조
@@ -480,7 +667,7 @@
 
         // 셀 선택 처리
         function selectCell(r, c) {
-            if (isGameOver || !isStarted) return;
+            if (isGameOver || !isStarted || isPaused) return;
             selectedCell = { r, c };
             updateAllHighlights();
         }
@@ -527,7 +714,7 @@
 
         // 숫자 입력 핵심 로직
         function inputNumber(num) {
-            if (!selectedCell || isGameOver || !isStarted) return;
+            if (!selectedCell || isGameOver || !isStarted || isPaused) return;
             const { r, c } = selectedCell;
             const state = boardState[r][c];
             
@@ -551,6 +738,7 @@
             refreshNotes();
             updateCellUI(r, c);
             updateAllHighlights(); // 동일 숫자 하이라이트 갱신을 위해 호출
+            saveGame();
             checkWinCondition();
         }
 
@@ -602,8 +790,10 @@
                     isGameOver = true;
                     selectedCell = null;
                     stopTimer();
+                    clearSave(); // 다 푼 게임은 다시 열면 새 게임으로 시작
                     const clearTime = formatTime(elapsedSeconds());
                     timerEl.textContent = clearTime;
+                    renderCover();
                     updateAllHighlights();
                     msgArea.textContent = `축하합니다! 스도쿠를 완성했습니다! (기록 ${clearTime})`;
                     msgArea.style.opacity = '1';
@@ -615,7 +805,7 @@
 
         // 키보드 조작
         window.addEventListener('keydown', (e) => {
-            if (isGameOver || !isStarted) return;
+            if (isGameOver || !isStarted || isPaused) return;
             
             // 숫자 및 지우기
             if (e.key >= '1' && e.key <= '9') inputNumber(parseInt(e.key));
@@ -642,9 +832,16 @@
                 initGame();
             });
         });
-        document.getElementById('btn-start').addEventListener('click', startGame);
+        startBtn.addEventListener('click', () => {
+            if (isStarted) resumeGame();
+            else startGame();
+        });
+        pauseBtn.addEventListener('click', () => {
+            if (isPaused) resumeGame();
+            else pauseGame();
+        });
         document.getElementById('btn-check').addEventListener('click', () => {
-            if (!isStarted) return;
+            if (!isStarted || isPaused) return;
             const hasError = checkMistakes();
             if (!hasError && !checkBoardFull() && !isGameOver) {
                 const checkBtn = document.getElementById('btn-check');
@@ -661,8 +858,16 @@
             }
         });
 
-        // 시작
-        window.onload = initGame;
+        // 화면을 끄거나 다른 앱/탭으로 가면 자동 일시정지 (저장도 같이 됨)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) pauseGame();
+        });
+        window.addEventListener('pagehide', pauseGame);
+
+        // 시작: 저장된 게임이 있으면 이어서, 없으면 새 게임
+        window.onload = () => {
+            if (!restoreGame()) initGame();
+        };
 
         // 오프라인 지원 (file://로 열면 지원 안 되므로 조용히 넘어감)
         if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
